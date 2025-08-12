@@ -1,5 +1,8 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { SafeAreaView, Text, View, StyleSheet, Pressable, Alert } from 'react-native';
+import { logger } from '../src/lib/logger';
+import { analytics } from '../src/lib/analytics';
+import { performanceMonitor } from '../src/lib/performance';
 
 type Phase = 'idle' | 'breathing' | 'hold' | 'recovery';
 
@@ -12,31 +15,68 @@ export default function BreathApp() {
   
   const breathTimer = useRef<NodeJS.Timeout | null>(null);
   const holdTimer = useRef<NodeJS.Timeout | null>(null);
+  const sessionId = useRef<string | null>(null);
 
   useEffect(() => {
+    logger.info('app', 'BreathApp component mounted');
+    performanceMonitor.trackMemoryUsage();
+    performanceMonitor.trackFrameRate();
+    
     return () => {
+      logger.info('app', 'BreathApp component unmounting');
       if (breathTimer.current) clearInterval(breathTimer.current);
       if (holdTimer.current) clearInterval(holdTimer.current);
+      if (sessionId.current) {
+        analytics.endSession();
+      }
     };
   }, []);
 
   const startBreathing = () => {
+    // Generate session ID if not exists
+    if (!sessionId.current) {
+      sessionId.current = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      analytics.startSession(sessionId.current, 4);
+    }
+    
+    performanceMonitor.startTimer('breathing_round', { round: currentRound });
+    analytics.trackPhaseChange('idle', 'breathing', { round: currentRound });
+    
     setPhase('breathing');
     setBreathCount(0);
     setIsInhaling(true);
+    
+    logger.info('breathing', 'Breathing phase started', { 
+      round: currentRound,
+      sessionId: sessionId.current 
+    });
+    
     breathingCycle();
   };
 
   const breathingCycle = () => {
+    analytics.trackBreathStart();
+    
     breathTimer.current = setInterval(() => {
       setBreathCount(prev => {
         const newCount = prev + 1;
         
         if (newCount <= 40) {
+          if (newCount > 1) {
+            analytics.trackBreathEnd();
+            analytics.trackBreathStart();
+          }
+          
           setIsInhaling(prev => !prev);
+          logger.debug('breathing', `Breath ${newCount}/40`, { 
+            isInhaling: !prev,
+            round: currentRound 
+          });
           return newCount;
         } else {
+          analytics.trackBreathEnd();
           if (breathTimer.current) clearInterval(breathTimer.current);
+          performanceMonitor.endTimer('breathing_round');
           startHoldPhase();
           return newCount;
         }
@@ -45,8 +85,14 @@ export default function BreathApp() {
   };
 
   const startHoldPhase = () => {
+    analytics.trackPhaseChange('breathing', 'hold', { round: currentRound });
+    analytics.trackHoldStart(currentRound);
+    performanceMonitor.startTimer('hold_phase', { round: currentRound });
+    
     setPhase('hold');
     setHoldTime(0);
+    
+    logger.info('breathing', 'Hold phase started', { round: currentRound });
     
     holdTimer.current = setInterval(() => {
       setHoldTime(prev => prev + 1);
@@ -54,15 +100,35 @@ export default function BreathApp() {
   };
 
   const endHold = () => {
+    const finalHoldTime = holdTime;
+    analytics.trackHoldEnd(finalHoldTime, currentRound);
+    performanceMonitor.endTimer('hold_phase');
+    
     if (holdTimer.current) clearInterval(holdTimer.current);
+    
+    analytics.trackPhaseChange('hold', 'recovery', { 
+      round: currentRound,
+      holdDuration: finalHoldTime 
+    });
+    
     setPhase('recovery');
+    
+    logger.info('breathing', 'Hold phase ended', { 
+      round: currentRound,
+      holdDuration: finalHoldTime 
+    });
     
     setTimeout(() => {
       if (currentRound < 4) {
+        analytics.trackPhaseChange('recovery', 'idle', { nextRound: currentRound + 1 });
         setCurrentRound(prev => prev + 1);
         setPhase('idle');
         setBreathCount(0);
         setHoldTime(0);
+        logger.info('breathing', 'Round completed, preparing for next', { 
+          completedRound: currentRound,
+          nextRound: currentRound + 1 
+        });
       } else {
         endSession();
       }
@@ -70,10 +136,19 @@ export default function BreathApp() {
   };
 
   const endSession = () => {
+    const sessionData = analytics.endSession();
+    const performanceData = performanceMonitor.getMetrics();
+    
     setPhase('idle');
     setCurrentRound(1);
     setBreathCount(0);
     setHoldTime(0);
+    sessionId.current = null;
+    
+    logger.info('session', 'Session completed successfully', {
+      sessionData,
+      performanceData
+    });
     
     Alert.alert('Session Complete', 'Great job! You completed all 4 rounds.');
   };
@@ -115,6 +190,12 @@ export default function BreathApp() {
   };
 
   const handleButtonPress = () => {
+    analytics.trackUserAction('button_press', { 
+      phase, 
+      currentRound,
+      buttonText: getButtonText() 
+    });
+    
     switch (phase) {
       case 'idle':
         startBreathing();
@@ -123,6 +204,7 @@ export default function BreathApp() {
         endHold();
         break;
       default:
+        logger.warn('user', 'Button pressed in invalid phase', { phase });
         break;
     }
   };

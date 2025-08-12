@@ -1,5 +1,6 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { logger } from './logger';
 
 export type Settings = {
   breathsPerRound: number;
@@ -25,14 +26,33 @@ export const DEFAULTS: Settings = {
 
 export async function loadSettings(): Promise<Settings> {
   try {
+    logger.debug('settings', 'Loading settings from storage');
     const raw = await AsyncStorage.getItem(KEY);
-    if (!raw) return DEFAULTS;
-    return { ...DEFAULTS, ...JSON.parse(raw) };
-  } catch {
+    if (!raw) {
+      logger.info('settings', 'No saved settings found, using defaults');
+      return DEFAULTS;
+    }
+    
+    const settings = { ...DEFAULTS, ...JSON.parse(raw) };
+    logger.info('settings', 'Settings loaded successfully', settings);
+    return settings;
+  } catch (error) {
+    logger.error('settings', 'Failed to load settings, using defaults', { 
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
     return DEFAULTS;
   }
 }
 
 export async function saveSettings(next: Settings) {
-  await AsyncStorage.setItem(KEY, JSON.stringify(next));
+  try {
+    await AsyncStorage.setItem(KEY, JSON.stringify(next));
+    logger.info('settings', 'Settings saved successfully', next);
+  } catch (error) {
+    logger.error('settings', 'Failed to save settings', { 
+      settings: next,
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    throw error;
+  }
 }
