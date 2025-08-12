@@ -1,2 +1,1 @@
-# MeditationApp
-An expo based meditation app aligning to the Wim Hoff method
+Wim Hof-style breathing app with inhale/exhale audio, ambient loop, settings, and history.
