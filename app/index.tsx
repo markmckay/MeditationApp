@@ -1,14 +1,13 @@
-
 // Simplified functional app code with audio + settings + history
 import React, { useState, useEffect, useRef } from 'react';
 import { SafeAreaView, Text, View } from 'react-native';
 import { Audio } from 'expo-av';
 import { useKeepAwake } from 'expo-keep-awake';
 import * as Speech from 'expo-speech';
-import BigButton from './src/components/BigButton';
-import { loadSettings, saveSettings, DEFAULTS, type Settings } from './src/lib/settings';
-import { getSessions, saveSession, clearSessions } from './src/lib/storage';
-import type { SessionLog, RoundLog } from './src/types';
+import BigButton from '../src/components/BigButton';
+import { loadSettings, saveSettings, DEFAULTS, type Settings } from '../src/lib/settings';
+import { getSessions, saveSession, clearSessions } from '../src/lib/storage';
+import type { SessionLog, RoundLog } from '../src/types';
 
 export default function App(){
   useKeepAwake();
@@ -26,11 +25,11 @@ export default function App(){
     loadSettings().then(setSettings);
     (async()=>{
       inhaleRef.current = new Audio.Sound();
-      await inhaleRef.current.loadAsync(require('./assets/sounds/inhale.wav'));
+      await inhaleRef.current.loadAsync(require('../assets/sounds/inhale.wav'));
       exhaleRef.current = new Audio.Sound();
-      await exhaleRef.current.loadAsync(require('./assets/sounds/exhale.wav'));
+      await exhaleRef.current.loadAsync(require('../assets/sounds/exhale.wav'));
       ambientRef.current = new Audio.Sound();
-      await ambientRef.current.loadAsync(require('./assets/sounds/ambient.wav'), { isLooping: true, volume: DEFAULTS.bgmVolume });
+      await ambientRef.current.loadAsync(require('../assets/sounds/ambient.wav'), { isLooping: true, volume: DEFAULTS.bgmVolume });
     })();
   },[]);
 
